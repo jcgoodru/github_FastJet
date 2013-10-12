@@ -2,7 +2,54 @@
 #include<math.h>
 using namespace std;
 
-//ARGUMENTS NEEDED: ieta, iphi, numcores, the tile list
+//INPUT THESE ARGUMENTS: ieta, iphi, numcores, the tile list
+
+
+
+/*
+HOW TILING WORKS: the particle field is broken up into
+regions (tiles) which are arranged on a grid.  The grid
+is basically a matrix, where iphi represents the rows
+and ieta the columns (both ieta and iphi are integers).
+
+
+The current (single core) FastJet implementation compares
+every tile with its 4 Right Hand tiles.
+  LRR
+  L-R  (these are the LH/RH tiles)
+  LLR
+The multicore implementation (aka this one) subdivides
+the grid into groups of tiles, then each group is sent
+to a thread to execute concurrently.  The purpose behind
+the partitioning of tiles is to help ensure that no two
+threads access the same tile simultaneously.
+
+This implementation works like this:
+**the partitions are initially sized based on the number
+  of cores.  For instance, if there are 12 cores, then
+  there will be 12 partitions (4 on the long side, 3 on the short)
+**there will never be less partitions than cores, but
+  sometimes more partitions than cores.
+**the partitions are then resized based on the number
+  of rows and columns on the actual grid (iphi/ieta).
+  Example: if there are 15 partitions horizontally but
+  ieta is only 12 columns, then the 15 partitions will
+  be reduced to 6.
+**These maximum distances are based on the assumption 
+  that 2 columns is the minimum ieta distance to (help)
+  assure two tiles won't access the same tile.
+  Like, if two tiles are horizontally adjacent, then the
+  RH tile of the left guy will be the other tile (and
+  locks/idling will be needed). (for iphi, min dist = 3)
+**lastly, the four-level forloop assigns the tiles to
+  their proper partition.  This works by scanning the
+  regular grid (left to right, then down a row...) and
+  storing the vectors somewhere (probably within 
+  a vector of vectors), and sending them to threads to
+  run concurrently.
+*/
+
+
 
 
 
@@ -85,5 +132,5 @@ Lastly, send the new tile vector entries
 */
   boost::thread_group TGROUP;
   for ( int i = 0 ; i < ( _ieta_partitions * _iphi_partitions ) ; i++ ){
-    TGROUP.create_thread("insert arguments and the 'list of tiles' here");
+    TGROUP.create_thread("insert arguments and the 'vector of vectors' here");
   }
