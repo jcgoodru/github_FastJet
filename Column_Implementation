@@ -1,0 +1,42 @@
+#include<math.h>
+#include<vector.h>
+#include<boost/bind.hpp>
+
+using namespace std;
+ac
+
+//input numcores, ieta, iphi
+
+int width = ceil( ieta / numcores ) ;
+// Initially, the width of the columns is
+// based on the number of available cores.
+
+
+if ( width > ceil( ieta / 2 ) ){ width = ceil( ieta / 2 ) ; }
+// This makes sure there's a buffer of at least
+// one grid-column between the new columns.
+// This helps reduce the need for locking
+
+
+int cores_utilized = ( ieta / width ) ;
+// This is the number of cores actually being utilized
+
+
+for ( int core = 0 ; core < cores_utilized ; core++ ){
+  for ( int row = 0 ; row < iphi ; row++ ){
+    for ( int tyle = 0 ; tyle < width ; j++){
+// This triple-loop assigns tiles to their proper column
+
+
+    //element:  ( ( row * ieta ) + ( core * width ) + tyle ) 
+    //add element to:  vector<core>
+
+    }
+  }
+}
+
+
+for ( int i = 0 ; i < cores_utilized ; i++ ){
+// This creates a thread for each subsection of tiles
+   // TGROUP.create_thread("insert arguments vector[i]");
+  }
