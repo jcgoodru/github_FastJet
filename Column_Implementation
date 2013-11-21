@@ -3,13 +3,14 @@
 #include<boost/bind.hpp>
 
 using namespace std;
-ac
 
-//input numcores, ieta, iphi
+
+//input numcores, ieta, iphi, _tiles
 
 int width = ceil( ieta / numcores ) ;
 // Initially, the width of the columns is
 // based on the number of available cores.
+
 
 
 if ( width > ceil( ieta / 2 ) ){ width = ceil( ieta / 2 ) ; }
@@ -18,18 +19,29 @@ if ( width > ceil( ieta / 2 ) ){ width = ceil( ieta / 2 ) ; }
 // This helps reduce the need for locking
 
 
+
 int cores_utilized = ( ieta / width ) ;
 // This is the number of cores actually being utilized
 
 
+
+vector<Tile> TileColumn(core)
+// This initializes a list of tiles to be processed
+// concurrently, and it's length is "core"
+
+
+
 for ( int core = 0 ; core < cores_utilized ; core++ ){
   for ( int row = 0 ; row < iphi ; row++ ){
-    for ( int tyle = 0 ; tyle < width ; j++){
+    for ( int tyle = 0 ; tyle < width ; tyle++){
 // This triple-loop assigns tiles to their proper column
 
 
-    //element:  ( ( row * ieta ) + ( core * width ) + tyle ) 
-    //add element to:  vector<core>
+      int location = ( ( row * ieta ) + ( core * width ) + tyle );
+
+      Tile *addthis = &_tiles.at(location);
+      //ELEMENT:  "addthis" needs to be a pointer to _tiles.at(location) 
+      //ADD ELEMENT "addthis" TO:  vector<Tile> TileColumn(core)
 
     }
   }
