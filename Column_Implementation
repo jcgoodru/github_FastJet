@@ -1,54 +1,102 @@
 #include<math.h>
-#include<vector.h>
+#include<vector>
 #include<boost/bind.hpp>
 
 using namespace std;
 
 
-//input numcores, ieta, iphi, _tiles
-
-int width = ceil( ieta / numcores ) ;
-// Initially, the width of the columns is
-// based on the number of available cores.
 
 
+void MULTICORE_NN_INITIALIZATION ( vector<Tile> _tiles , int ieta , int iphi , int numcores ) {
 
-if ( width > ceil( ieta / 2 ) ){ width = ceil( ieta / 2 ) ; }
-// This makes sure there's a buffer of at least
-// one grid-column between the new columns.
-// This helps reduce the need for locking
+  int width = ceil( ieta / numcores ) ;
+  // Initially, the width of the columns is
+  // based on the number of available cores.
+
+  if ( width > ceil( ieta / 2 ) ) { width = ceil( ieta / 2 ) ; }
+  // This makes sure there's a buffer of at least
+  // one grid-column between the new columns.
+  // This helps reduce the need for locking
+
+  int cores_utilized = ceil ( ( ieta / width ) ) ;
+  // This is the number of cores actually being utilized
+
+  vector< vector<Tile *> > Tile_Column ;
+  //this is the conglomerate vector of pointers
+	
+  for ( int core = 0 ; core < cores_utilized ; core++ ) {
+    vector<Tile *> core_vector;  //there will be one vector of pointers for each core
+    for ( int col = 0 ; col < width ; col++ ) {
+      for ( int row = 0 ; row < iphi ; row++ ) {
+      // This triple-loop assigns tiles to their proper column
+        int location = ( ( row * ieta ) + ( core * width ) + col ) ;
+        //the tile corresponding to this iteration
+        Tile *addthis = &_tiles.at( location ) ;
+        core_vector.push_back( *addthis ) ;
+      }
+    }
+    Tile_Column.push_back ( core_vector ) ;
+  }//end 'triple-for'
+
+  for ( int i = 0 ; i < cores_utilized ; i++ ) {
+    // This creates a thread for each subsection of tiles
+    TGROUP.create_thread( boost::bind( &NN_INITIALIZATION, Tile_Column[i] , TiledJet * jetA , TiledJet * jetB , TiledJet * NN , double NN_dist ) );
+  }// end 'for'
+
+  TGROUP.join_all();
+
+}//end MULTICORE_NN_INITIALIZATION
 
 
 
-int cores_utilized = ( ieta / width ) ;
-// This is the number of cores actually being utilized
 
 
+/* 
 
-vector<Tile> TileColumn(core)
-// This initializes a list of tiles to be processed
-// concurrently, and it's length is "core"
+*************************************************************
 
-
-
-for ( int core = 0 ; core < cores_utilized ; core++ ){
-  for ( int row = 0 ; row < iphi ; row++ ){
-    for ( int tyle = 0 ; tyle < width ; tyle++){
-// This triple-loop assigns tiles to their proper column
+   This is the concurrency conditional.
+   It needs to be inserted in place of
+   lines 290-312, and those lines need 
+   to be relocated to a void function
 
 
-      int location = ( ( row * ieta ) + ( core * width ) + tyle );
+if ( parallelize == true ) {
+  MULTICORE_NN_INITIALIZATION( _tiles , ieta , iphi , numcores ) ;
+} else { 
+  NN_INITIALIZATION( _tiles , jetA , jetB , NN , NN_dist ) ;
+}
 
-      Tile *addthis = &_tiles.at(location);
-      //ELEMENT:  "addthis" needs to be a pointer to _tiles.at(location) 
-      //ADD ELEMENT "addthis" TO:  vector<Tile> TileColumn(core)
+*************************************************************
 
+    This is the NN-initialization loop.
+    It needs to exist as a standalone
+    function.  This needs to be pasted
+    somewhere in ClusterSeq::Tiled N^2
+
+
+void NN_INITIALIZATION ( vector<Tile> TILE_LIST , TiledJet * jetA , TiledJet * jetB , TiledJet * NN , double NN_dist) {
+
+  vector<Tile>::const_iterator tile;
+  for (tile = TILE_LIST.begin(); tile != TILE_LIST.end(); tile++) {
+    // first do it on this tile
+    for (jetA = tile->head; jetA != NULL; jetA = jetA->next) {
+      for (jetB = tile->head; jetB != jetA; jetB = jetB->next) {
+        double dist = _bj_dist(jetA,jetB);
+        if (dist < jetA->NN_dist) {jetA->NN_dist = dist; jetA->NN = jetB;}
+        if (dist < jetB->NN_dist) {jetB->NN_dist = dist; jetB->NN = jetA;}
+      }
+    }
+    // then do it for RH tiles
+    for (Tile ** RTile = tile->RH_tiles; RTile != tile->end_tiles; RTile++) {
+      for (jetA = tile->head; jetA != NULL; jetA = jetA->next) {
+        for (jetB = (*RTile)->head; jetB != NULL; jetB = jetB->next) {
+          double dist = _bj_dist(jetA,jetB);
+          if (dist < jetA->NN_dist) {jetA->NN_dist = dist; jetA->NN = jetB;}
+          if (dist < jetB->NN_dist) {jetB->NN_dist = dist; jetB->NN = jetA;}
+        }
+      }
     }
   }
 }
 
-
-for ( int i = 0 ; i < cores_utilized ; i++ ){
-// This creates a thread for each subsection of tiles
-   // TGROUP.create_thread("insert arguments vector[i]");
-  }
