@@ -1,171 +1,106 @@
-#include<iostream>
-#include<fstream>
-#include<numeric>
-#include<boost/thread.hpp>
+#include<cmath>
+#include<vector>
 #include<boost/bind.hpp>
-#include<time.h>
+#include<boost/thread.hpp>
+
+
+FASTJET_BEGIN_NAMESPACE      // defined in fastjet/internal/base.hh
+
 using namespace std;
 
 
+void ClusterSequence::MULTICORE_NN_INITIALIZATION ( vector<Tile> _tiles , int ieta , int iphi , int numcores ) {
 
-int main ( int argc , char *argv[] ){
+  int width = ceil( ieta / numcores ) ;
+  // Initially, the width of the columns is
+  // based on the number of available cores.
 
+  if ( width > ceil( ieta / 2 ) ) { width = ceil( ieta / 2 ) ; }
+  // This makes sure there's a buffer of at least
+  // one grid-column between the new columns.
+  // This helps reduce the need for locking
 
-/*
-Currently, I'm assuming FJ will take a command-line argument.
-This argument is argv[1], aka, the number of cores you're using.
-*/
+  int cores_utilized = ceil ( ( ieta / width ) ) ;
+  // This is the number of cores actually being utilized
 
-  if( argc == 1 ){
-    int numcores = 1;
-  }else{
-    int numcores = argv[1];
-  }
-
-
-
-
-/*
-This is where I'm putting threaded code for now...
-Later, I'll either leave all the parallelizible
-sections in here, to be run when called by the
-main FJ part, or I'll put them in FJ itself.
-
-I'm thinking:
-[ pretend the following  code is located in the      ]
-[ primary parts of FastJet (ClusterSequence, etc...) ]
-
-EITHER send the flow of control to 
-       this document, concurrency.hh:
-
-   if (parallelize? = true){
-     [execute threaded version, by sending the flow]
-     [of control to this file.  Once the threaded  ]
-     [code is done, return flow of control to the  ]
-     [part of FastJet that enabled this section    ]
-   }else{
-     [execute the currently existing, single       ]
-     [core implementation of FastJet               ]
-   }
-
-OR leave the flow of control in the
-   FastJet file I pulled it from:
-
-   if (parallelize? = true){
-     [execute threaded version, which is located   ]
-     [within the FastJet documents themselves      ]
-   }else{
-     [execute the currently existing, single       ]
-     [core implementation of FastJet               ]
-   }
-
-
-
-
-
-
-The second implementation is easiest for me, but it
-would require "clogging" the files with extra code
-(which isn't necessarily a bad thing).  Nonetheless,
-the code itself needs to be written, the only
-difference here is the location of the concurrent
-models.
-*/
+  vector< vector<Tile *> > Tile_Column ;
+  //this is the conglomerate vector of pointers
 	
-00291   vector<Tile>::const_iterator tile;
-00292   for (tile = _tiles.begin(); tile != _tiles.end(); tile++) {
-00293     // first do it on this tile
-
-tile, jetA??, jetB??
-
-00294     for (jetA = tile->head; jetA != NULL; jetA = jetA->next) {
-00295       for (jetB = tile->head; jetB != jetA; jetB = jetB->next) {
-00296         double dist = _bj_dist(jetA,jetB);
-00297         if (dist < jetA->NN_dist) {jetA->NN_dist = dist; jetA->NN = jetB;}
-00298         if (dist < jetB->NN_dist) {jetB->NN_dist = dist; jetB->NN = jetA;}
-00299       }
-00300     }
-00301     // then do it for RH tiles
-00302     for (Tile ** RTile = tile->RH_tiles; RTile != tile->end_tiles; RTile++) {
-00303       for (jetA = tile->head; jetA != NULL; jetA = jetA->next) {
-00304         for (jetB = (*RTile)->head; jetB != NULL; jetB = jetB->next) {
-00305           double dist = _bj_dist(jetA,jetB);
-00306           if (dist < jetA->NN_dist) {jetA->NN_dist = dist; jetA->NN = jetB;}
-00307           if (dist < jetB->NN_dist) {jetB->NN_dist = dist; jetB->NN = jetA;}
-00308         }
-00309       }
-00310     }
-00311   }
-
-
-
-//  TGROUP.create_thread(boost::bind(&TILING_292_300::compute,&ThreadedTile));
-
-class TILING_292_311 {
-  public :
-    //TILING_292_311(unsigned int N) : NNdist(N) {}
-    //double & operator[] (unsigned int j) {return NNdist[j];}
-    void _292_300_(tile){
-      for (jetA = tile->head; jetA != NULL; jetA = jetA->next) {
-       for (jetB = tile->head; jetB != jetA; jetB = jetB->next) {
-         double dist = _bj_dist(jetA,jetB);
-         if (dist < jetA->NN_dist) {jetA->NN_dist = dist; jetA->NN = jetB;}
-         if (dist < jetB->NN_dist) {jetB->NN_dist = dist; jetB->NN = jetA;}
-       }
+  for ( int core = 0 ; core < cores_utilized ; core++ ) {
+    vector<Tile *> core_vector;  //there will be one vector of pointers for each core
+    for ( int col = 0 ; col < width ; col++ ) {
+      for ( int row = 0 ; row < iphi ; row++ ) {
+      // This triple-loop assigns tiles to their proper column
+        int location = ( ( row * ieta ) + ( core * width ) + col ) ;
+        //the tile corresponding to this iteration
+        Tile *addthis = &_tiles.at( location ) ;
+        core_vector.push_back( *addthis ) ;
       }
-  //  void _302_310_(arguments referring to tile){
-
-    //  for (Tile ** RTile = tile->RH_tiles; RTile != tile->end_tiles; RTile++) {
-      //  for (jetA = tile->head; jetA != NULL; jetA = jetA->next) {
-        //  for (jetB = (*RTile)->head; jetB != NULL; jetB = jetB->next) {
-          //  double dist = _bj_dist(jetA,jetB);
-            //if (dist < jetA->NN_dist) {jetA->NN_dist = dist; jetA->NN = jetB;}
-            //if (dist < jetB->NN_dist) {jetB->NN_dist = dist; jetB->NN = jetA;}
-   //       }
-    //    }
-     // }
     }
-    protected : 
-      //std::vector<double> NNdist;
-};
+    Tile_Column.push_back ( core_vector ) ;
+  }//end 'triple-for'
+
+  for ( int i = 0 ; i < cores_utilized ; i++ ) {
+    // This creates a thread for each subsection of tiles
+    TGROUP.create_thread( boost::bind( &NN_INITIALIZATION, Tile_Column[i] , TiledJet * jetA , TiledJet * jetB , TiledJet * NN , double NN_dist ) );
+  }// end 'for'
+
+  TGROUP.join_all();
+
+}//end MULTICORE_NN_INITIALIZATION
 
 
+FASTJET_END_NAMESPACE
 
 
+/* 
 
-/*this is w/o a locking mechanism, this simply
-  creates a thread for every tile.  This is
-  written under the assumption that each thread
-  will execute whenever a core is free   */
-boost::thread_group ThreadGROUP;
-vector<Tile>::const_iterator ThreadedTile;
-ThreadedTile = _tiles.begin();
-while( ThreadedTile != _tiles.end() ){
-  ThreadGROUP.create_thread(boost::bind(&TILING_292_311::_292_300_,&ThreadedTile));
-  ThreadedTile++;
-}
-ThreadGROUP.join_all();
+*************************************************************
+
+ DONE:
+   This is the concurrency conditional.
+   It needs to be inserted in place of
+   lines 290-312, and those lines need 
+   to be relocated to a void function
 
 
-
-
-
-// with a locking mechanism (under construction)
-int bool locked[numcores];
-boost::thread_group ThreadGROUP;
-vector<Tile>::const_iterator ThreadedTile;
-ThreadedTile = _tiles.begin();
-
-for ( int i = 0 ; i < numcores ; i++ ){
-  ThreadGROUP.create_thread(/*ThreadedTile and other arguments*/)
-  locked[i] = true;
-  ThreadedTile++;
+if ( parallelize == true ) {
+  MULTICORE_NN_INITIALIZATION( _tiles , ieta , iphi , numcores ) ;
+} else { 
+  NN_INITIALIZATION( _tiles , jetA , jetB , NN , NN_dist ) ;
 }
 
+*************************************************************
+
+  DONE:
+    This is the NN-initialization loop.
+    It needs to exist as a standalone
+    function.  This needs to be pasted
+    somewhere in ClusterSeq::Tiled N^2
 
 
+void ClusterSequence::NN_INITIALIZATION ( vector<Tile> TILE_LIST , TiledJet * jetA , TiledJet * jetB , TiledJet * NN , double NN_dist) {
 
+  vector<Tile>::const_iterator tile;
+  for (tile = TILE_LIST.begin(); tile != TILE_LIST.end(); tile++) {
+    // first do it on this tile
+    for (jetA = tile->head; jetA != NULL; jetA = jetA->next) {
+      for (jetB = tile->head; jetB != jetA; jetB = jetB->next) {
+        double dist = _bj_dist(jetA,jetB);
+        if (dist < jetA->NN_dist) {jetA->NN_dist = dist; jetA->NN = jetB;}
+        if (dist < jetB->NN_dist) {jetB->NN_dist = dist; jetB->NN = jetA;}
+      }
+    }
+    // then do it for RH tiles
+    for (Tile ** RTile = tile->RH_tiles; RTile != tile->end_tiles; RTile++) {
+      for (jetA = tile->head; jetA != NULL; jetA = jetA->next) {
+        for (jetB = (*RTile)->head; jetB != NULL; jetB = jetB->next) {
+          double dist = _bj_dist(jetA,jetB);
+          if (dist < jetA->NN_dist) {jetA->NN_dist = dist; jetA->NN = jetB;}
+          if (dist < jetB->NN_dist) {jetB->NN_dist = dist; jetB->NN = jetA;}
+        }
+      }
+    }
+  }
+}
 
-
-
-return 69;}
